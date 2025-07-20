@@ -78,32 +78,7 @@ const BookingPage: React.FC = () => {
     }));
   };
 
-  const calculatePrice = () => {
-    const workspace = workspaceTypes.find(w => w.name === formData.workspaceType);
-    const duration = durations.find(d => d.value === formData.duration);
-    
-    if (!workspace || !duration) return 0;
-    
-    return workspace.price * duration.multiplier;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    const totalPrice = calculatePrice();
-    
-    const bookingData = {
-      ...formData,
-      totalPrice
-    };
-    
-    setBookingData(bookingData);
-    
-    // Save booking to database immediately
-    saveBookingToDatabase(bookingData);
-  };
-
-  const saveBookingToDatabase = async (bookingData: any) => {
+   const saveBookingToDatabase = async (bookingData: any) => {
     try {
       const { data, error } = await supabase
         .from('bookings')
@@ -135,6 +110,32 @@ const BookingPage: React.FC = () => {
       alert('Failed to save booking. Please try again.');
     }
   };
+  
+  const calculatePrice = () => {
+    const workspace = workspaceTypes.find(w => w.name === formData.workspaceType);
+    const duration = durations.find(d => d.value === formData.duration);
+    
+    if (!workspace || !duration) return 0;
+    
+    return workspace.price * duration.multiplier;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    const totalPrice = calculatePrice();
+    
+    const bookingData = {
+      ...formData,
+      totalPrice
+    };
+    
+    setBookingData(bookingData);
+    
+    // Save booking to database immediately
+    saveBookingToDatabase(bookingData);
+  };
+
 
   // Show loading spinner while content is being fetched
   if (contentLoading) {
