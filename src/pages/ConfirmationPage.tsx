@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useEffect } from 'react';
 import { MessageCircle, CheckCircle, AlertCircle, Phone, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useBooking, confirmBooking } from '../contexts/BookingContext';
+import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useContent } from '../hooks/useContent';
 import { supabase } from '../lib/supabase';
