@@ -1,41 +1,38 @@
 import React, { useState } from 'react';
 import { useEffect } from 'react';
-import { MessageCircle, CheckCircle, AlertCircle } from 'lucide-react';
+import { MessageCircle, CheckCircle, AlertCircle, Phone, CreditCard } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useBooking } from '../contexts/BookingContext';
 import { useAuth } from '../contexts/AuthContext';
+import { useContent } from '../hooks/useContent';
+import { supabase } from '../lib/supabase';
 
 const ConfirmationPage: React.FC = () => {
   const navigate = useNavigate();
-  const { bookingData, confirmBooking, clearBookingData, submitBookingForConfirmation } = useBooking();
+  const { bookingData, clearBookingData } = useBooking();
   const { user } = useAuth();
+  const { getSetting } = useContent();
   const [confirmationCode, setConfirmationCode] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState('');
-  const [codeSent, setCodeSent] = useState(false);
+  const [bookingId, setBookingId] = useState<string | null>(null);
 
   if (!bookingData) {
-    navigate('/booking');
-    return null;
+    // Try to get booking ID from session storage
+    const storedBookingId = sessionStorage.getItem('currentBookingId');
+    if (!storedBookingId) {
+      navigate('/booking');
+      return null;
+    }
   }
 
   useEffect(() => {
-    // Send WhatsApp confirmation code when component mounts
-    const sendCode = async () => {
-      try {
-        if (submitBookingForConfirmation) {
-          await submitBookingForConfirmation();
-          setCodeSent(true);
-        }
-      } catch (error) {
-        setError('Failed to send confirmation code. Please try again.');
-      }
-    };
-
-    if (!codeSent) {
-      sendCode();
+    // Get booking ID from session storage
+    const storedBookingId = sessionStorage.getItem('currentBookingId');
+    if (storedBookingId) {
+      setBookingId(storedBookingId);
     }
-  }, [submitBookingForConfirmation, codeSent]);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,18 +40,58 @@ const ConfirmationPage: React.FC = () => {
     setError('');
 
     try {
-      await confirmBooking(confirmationCode);
-      // Success - redirect to thank you page or dashboard
+      if (!bookingId) {
+        throw new Error('No booking ID found');
+      }
+
+      // Send webhook to backend with confirmation
+      const webhookData = {
+        bookingId: bookingId,
+        confirmationCode: confirmationCode,
+        action: 'confirm_payment',
+        timestamp: new Date().toISOString()
+      };
+
+      const response = await fetch('https://webhook.site/example', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(webhookData)
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to process confirmation');
+      }
+
+      // Update booking status to confirmed
+      const { error: updateError } = await supabase
+        .from('bookings')
+        .update({ 
+          status: 'confirmed',
+          confirmation_code: confirmationCode
+        })
+        .eq('id', bookingId);
+
+      if (updateError) throw updateError;
+
+      // Clear session data
+      sessionStorage.removeItem('currentBookingId');
       clearBookingData();
+      
+      // Success - redirect to thank you page
       navigate('/', { 
         state: { message: 'Booking confirmed successfully! We will contact you shortly.' }
       });
     } catch (err) {
-      setError('Invalid confirmation code. Please try again.');
+      setError('Failed to confirm booking. Please try again or contact support.');
     } finally {
       setIsSubmitting(false);
     }
   };
+
+  // Get payment phone number from settings
+  const paymentPhone = getSetting('payment_phone', '+20 123 456 7890');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -63,10 +100,10 @@ const ConfirmationPage: React.FC = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-4xl md:text-5xl font-bold mb-4">
-              Confirm Your Booking
+              Complete Your Payment
             </h1>
             <p className="text-xl md:text-2xl max-w-3xl mx-auto">
-              We've sent a confirmation code to your WhatsApp
+              Transfer the amount and get your confirmation code
             </p>
           </div>
         </div>
@@ -77,7 +114,8 @@ const ConfirmationPage: React.FC = () => {
         <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="bg-white rounded-lg shadow-lg p-8">
             {/* Booking Summary */}
-            <div className="mb-8">
+            {bookingData && (
+              <div className="mb-8">
               <h3 className="text-xl font-semibold text-black mb-4">Booking Summary</h3>
               <div className="bg-gray-50 p-4 rounded-lg space-y-2">
                 <div className="flex justify-between">
@@ -98,7 +136,39 @@ const ConfirmationPage: React.FC = () => {
                 </div>
                 <div className="flex justify-between border-t pt-2">
                   <span className="text-gray-600">Total Cost:</span>
-                  <span className="font-bold text-yellow-600">${bookingData.totalPrice}</span>
+                  <span className="font-bold text-yellow-600">E£{bookingData.totalPrice}</span>
+                </div>
+              </div>
+              </div>
+            )}
+
+            {/* Payment Instructions */}
+            <div className="mb-8">
+              <div className="flex items-center mb-4">
+                <CreditCard className="w-6 h-6 text-green-500 mr-2" />
+                <h3 className="text-xl font-semibold text-black">Payment Instructions</h3>
+              </div>
+              
+              <div className="bg-green-50 border border-green-200 rounded-lg p-6 mb-4">
+                <div className="flex items-start">
+                  <Phone className="w-6 h-6 text-green-500 mr-3 mt-1 flex-shrink-0" />
+                  <div>
+                    <p className="text-green-800 font-medium text-lg mb-2">
+                      Transfer Payment To:
+                    </p>
+                    <p className="text-green-700 text-2xl font-bold mb-3">
+                      {paymentPhone}
+                    </p>
+                    <p className="text-green-700 text-lg font-medium mb-2">
+                      Amount: E£{bookingData?.totalPrice || 0}
+                    </p>
+                    <div className="text-green-600 text-sm space-y-1">
+                      <p>• Transfer the exact amount via mobile money or bank transfer</p>
+                      <p>• After payment, you will receive a confirmation code on WhatsApp</p>
+                      <p>• The confirmation code may take 2-5 minutes to arrive</p>
+                      <p>• Enter the code below to complete your booking</p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -107,7 +177,7 @@ const ConfirmationPage: React.FC = () => {
             <div className="mb-8">
               <div className="flex items-center mb-4">
                 <MessageCircle className="w-6 h-6 text-green-500 mr-2" />
-                <h3 className="text-xl font-semibold text-black">WhatsApp Confirmation</h3>
+                <h3 className="text-xl font-semibold text-black">Enter Confirmation Code</h3>
               </div>
               
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
@@ -115,16 +185,13 @@ const ConfirmationPage: React.FC = () => {
                   <AlertCircle className="w-5 h-5 text-blue-500 mr-2 mt-0.5 flex-shrink-0" />
                   <div>
                     <p className="text-blue-800 font-medium">
-                      {codeSent ? 'Confirmation code sent!' : 'Sending confirmation code...'}
+                      Waiting for payment confirmation
                     </p>
                     <p className="text-blue-600 text-sm mt-1">
-                      We've sent a confirmation code to your WhatsApp number: {bookingData.customerWhatsapp}
+                      After completing the payment, you will receive a confirmation code on: {bookingData?.customerWhatsapp}
                     </p>
                     <p className="text-blue-600 text-sm mt-1">
-                      It may take a few minutes to arrive. 
-                      {!user && (
-                        <span className="font-medium"> Please do not close this page if you're not logged in.</span>
-                      )}
+                      The code may take 2-5 minutes to arrive after payment.
                     </p>
                     <p className="text-blue-600 text-sm mt-2 font-medium">
                       Demo: Use code "123456" for testing
@@ -178,11 +245,11 @@ const ConfirmationPage: React.FC = () => {
             <div className="border-t pt-6">
               <h3 className="text-lg font-semibold text-black mb-2">Need Help?</h3>
               <p className="text-gray-600 mb-2">
-                If you don't receive the confirmation code within 10 minutes, please contact us:
+                If you don't receive the confirmation code after payment, please contact us:
               </p>
               <div className="space-y-1">
-                <p className="text-sm text-gray-600">Phone: +1 (555) 123-4567</p>
-                <p className="text-sm text-gray-600">Email: support@desk4u.com</p>
+                <p className="text-sm text-gray-600">Phone: {getSetting('contact_phone', '+20 123 456 7890')}</p>
+                <p className="text-sm text-gray-600">Email: {getSetting('contact_email', 'support@desk4u.com')}</p>
               </div>
             </div>
           </div>

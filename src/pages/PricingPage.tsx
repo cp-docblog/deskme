@@ -101,7 +101,7 @@ const PricingPage: React.FC = () => {
                           <span className="text-gray-700">{feature}</span>
                         </li>
                       ))}
-                      {plan.not_included.map((feature, featureIndex) => (
+                      {plan.not_included && plan.not_included.map((feature, featureIndex) => (
                         <li key={featureIndex} className="flex items-center">
                           <X className="w-5 h-5 text-red-500 mr-2 flex-shrink-0" />
                           <span className="text-gray-400">{feature}</span>

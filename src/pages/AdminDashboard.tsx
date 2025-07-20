@@ -101,24 +101,64 @@ const AdminDashboard: React.FC = () => {
 
   const handleConfirmBooking = async (bookingId: string) => {
     try {
+      // Generate confirmation code
+      const confirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
+      
       // Update booking status in database
       const { error } = await supabase
         .from('bookings')
-        .update({ status: 'confirmed' })
+        .update({ 
+          status: 'confirmed',
+          confirmation_code: confirmationCode
+        })
         .eq('id', bookingId);
 
       if (error) throw error;
 
-      // Send webhook notification
-      if (sendWebhook) {
-        await sendWebhook(bookingId, 'confirm');
+      // Get booking data for webhook
+      const { data: bookingData, error: fetchError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Send webhook notification with confirmation code
+      try {
+        await fetch('https://webhook.site/example', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'send_confirmation_code',
+            bookingId: bookingId,
+            confirmationCode: confirmationCode,
+            customerData: {
+              name: bookingData.customer_name,
+              whatsapp: bookingData.customer_whatsapp,
+              email: bookingData.customer_email
+            },
+            bookingDetails: {
+              workspace_type: bookingData.workspace_type,
+              date: bookingData.date,
+              time_slot: bookingData.time_slot,
+              total_price: bookingData.total_price
+            },
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (webhookError) {
+        console.error('Webhook failed:', webhookError);
+        // Don't fail the confirmation if webhook fails
       }
       
       // Refresh bookings
       await fetchBookings();
       await fetchStats();
       
-      alert('Booking confirmed successfully!');
+      alert(`Booking confirmed! Confirmation code ${confirmationCode} will be sent to customer.`);
     } catch (error) {
       console.error('Error confirming booking:', error);
       alert('Failed to confirm booking. Please try again.');

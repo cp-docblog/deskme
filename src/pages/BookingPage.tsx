@@ -92,12 +92,48 @@ const BookingPage: React.FC = () => {
     
     const totalPrice = calculatePrice();
     
-    setBookingData({
+    const bookingData = {
       ...formData,
       totalPrice
-    });
+    };
     
-    navigate('/confirmation');
+    setBookingData(bookingData);
+    
+    // Save booking to database immediately
+    saveBookingToDatabase(bookingData);
+  };
+
+  const saveBookingToDatabase = async (bookingData: any) => {
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .insert({
+          workspace_type: bookingData.workspaceType,
+          date: bookingData.date,
+          time_slot: bookingData.timeSlot,
+          duration: bookingData.duration,
+          customer_name: bookingData.customerName,
+          customer_email: bookingData.customerEmail,
+          customer_phone: bookingData.customerPhone,
+          customer_whatsapp: bookingData.customerWhatsapp,
+          total_price: bookingData.totalPrice,
+          status: 'pending'
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      // Store booking ID for later reference
+      sessionStorage.setItem('currentBookingId', data.id);
+      
+      // Navigate to confirmation page
+      navigate('/confirmation');
+      
+    } catch (error) {
+      console.error('Error saving booking:', error);
+      alert('Failed to save booking. Please try again.');
+    }
   };
 
   // Show loading spinner while content is being fetched
@@ -158,7 +194,7 @@ const BookingPage: React.FC = () => {
                             duration={500}
                           >
                             <label
-                              className={`border-2 rounded-lg p-4 cursor-pointer transition-all duration-300 transform hover:scale-105 ${
+                              className={`border-2 rounded-lg p-6 cursor-pointer transition-all duration-300 transform hover:scale-105 block ${
                                 formData.workspaceType === workspace.name
                                   ? 'border-yellow-500 bg-yellow-50'
                                   : 'border-gray-300 hover:border-gray-400'
@@ -172,9 +208,17 @@ const BookingPage: React.FC = () => {
                                 onChange={handleChange}
                                 className="sr-only"
                               />
-                              <div className="text-center">
-                                <h4 className="font-semibold text-black">{workspace.name}</h4>
-                                <p className="text-yellow-600 font-bold">E£{workspace.price}/{workspace.price_unit}</p>
+                              <div className="text-center space-y-3">
+                                <h4 className="font-semibold text-black text-lg">{workspace.name}</h4>
+                                <p className="text-gray-600 text-sm">{workspace.description}</p>
+                                <div className="text-yellow-600 font-bold text-xl">E£{workspace.price}/{workspace.price_unit}</div>
+                                {workspace.features && workspace.features.length > 0 && (
+                                  <ul className="text-xs text-gray-500 space-y-1">
+                                    {workspace.features.slice(0, 3).map((feature, idx) => (
+                                      <li key={idx}>• {feature}</li>
+                                    ))}
+                                  </ul>
+                                )}
                               </div>
                             </label>
                           </AnimatedSection>

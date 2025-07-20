@@ -117,7 +117,7 @@ export const useContent = () => {
         supabase
           .from('site_settings')
           .select('*')
-          .eq('is_public', true),
+          .order('key', { ascending: true }),
         supabase
           .from('team_members')
           .select('*')
