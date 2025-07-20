@@ -103,17 +103,6 @@ const AdminDashboard: React.FC = () => {
     try {
       // Generate confirmation code
       const confirmationCode = Math.floor(100000 + Math.random() * 900000).toString();
-      
-      // Update booking status in database
-      const { error } = await supabase
-        .from('bookings')
-        .update({ 
-          status: 'confirmed',
-          confirmation_code: confirmationCode
-        })
-        .eq('id', bookingId);
-
-      if (error) throw error;
 
       // Get booking data for webhook
       const { data: bookingData, error: fetchError } = await supabase
