@@ -24,6 +24,8 @@ const BookingPage: React.FC = () => {
   const { getContent, loading: contentLoading } = useContent();
   const [workspaceTypes, setWorkspaceTypes] = useState<WorkspaceType[]>([]);
   const [loading, setLoading] = useState(true);
+  const [bookedSlots, setBookedSlots] = useState<string[]>([]);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
   
   const [formData, setFormData] = useState({
     workspaceType: '',
@@ -39,6 +41,15 @@ const BookingPage: React.FC = () => {
   useEffect(() => {
     fetchWorkspaceTypes();
   }, []);
+
+  // Fetch booked slots when workspace type or date changes
+  useEffect(() => {
+    if (formData.workspaceType && formData.date) {
+      fetchBookedSlots();
+    } else {
+      setBookedSlots([]);
+    }
+  }, [formData.workspaceType, formData.date]);
 
   const fetchWorkspaceTypes = async () => {
     try {
@@ -57,6 +68,28 @@ const BookingPage: React.FC = () => {
     }
   };
 
+  const fetchBookedSlots = async () => {
+    setCheckingAvailability(true);
+    try {
+      const { data, error } = await supabase
+        .from('bookings')
+        .select('time_slot')
+        .eq('workspace_type', formData.workspaceType)
+        .eq('date', formData.date)
+        .in('status', ['pending', 'confirmed']);
+
+      if (error) throw error;
+
+      const slots = data?.map(booking => booking.time_slot) || [];
+      setBookedSlots(slots);
+    } catch (error) {
+      console.error('Error fetching booked slots:', error);
+      setBookedSlots([]);
+    } finally {
+      setCheckingAvailability(false);
+    }
+  };
+
   const timeSlots = [
     '9:00 AM', '10:00 AM', '11:00 AM', '12:00 PM',
     '1:00 PM', '2:00 PM', '3:00 PM', '4:00 PM', '5:00 PM'
@@ -72,10 +105,21 @@ const BookingPage: React.FC = () => {
   ];
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    setFormData(prev => ({
-      ...prev,
-      [e.target.name]: e.target.value
-    }));
+    const { name, value } = e.target;
+    
+    // Reset time slot if workspace type or date changes
+    if ((name === 'workspaceType' || name === 'date') && formData.timeSlot) {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value,
+        timeSlot: '' // Reset time slot when workspace or date changes
+      }));
+    } else {
+      setFormData(prev => ({
+        ...prev,
+        [name]: value
+      }));
+    }
   };
 
    const saveBookingToDatabase = async (bookingData: any) => {
@@ -251,20 +295,40 @@ const BookingPage: React.FC = () => {
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">
                         <Clock className="w-4 h-4 inline mr-2" />
-                        Select Time
+                        Select Time {checkingAvailability && <span className="text-yellow-500">(Checking availability...)</span>}
                       </label>
                       <select
                         name="timeSlot"
                         value={formData.timeSlot}
                         onChange={handleChange}
                         required
+                        disabled={!formData.workspaceType || !formData.date || checkingAvailability}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-yellow-500 transition-all duration-300"
                       >
-                        <option value="">Choose time slot</option>
-                        {timeSlots.map((slot) => (
-                          <option key={slot} value={slot}>{slot}</option>
-                        ))}
+                        <option value="">
+                          {!formData.workspaceType || !formData.date 
+                            ? 'Select workspace and date first' 
+                            : checkingAvailability 
+                            ? 'Checking availability...' 
+                            : 'Choose available time slot'
+                          }
+                        </option>
+                        {timeSlots
+                          .filter(slot => !bookedSlots.includes(slot))
+                          .map((slot) => (
+                            <option key={slot} value={slot}>{slot}</option>
+                          ))}
                       </select>
+                      {formData.workspaceType && formData.date && bookedSlots.length > 0 && (
+                        <p className="text-sm text-gray-500 mt-1">
+                          Unavailable slots: {bookedSlots.join(', ')}
+                        </p>
+                      )}
+                      {formData.workspaceType && formData.date && bookedSlots.length === timeSlots.length && (
+                        <p className="text-sm text-red-500 mt-1">
+                          No available slots for this date. Please choose a different date.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </AnimatedSection>

@@ -118,36 +118,86 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
   const finalizeBooking = async (confirmationCode: string) => {
     if (!bookingData) throw new Error('No booking data available');
     
-    // Verify the confirmation code
-    if (!verifyConfirmationCode(confirmationCode)) {
-      throw new Error('Invalid confirmation code');
-    }
+    // Get booking ID from session storage
+    const bookingId = sessionStorage.getItem('currentBookingId');
+    if (!bookingId) throw new Error('No booking ID found');
     
     try {
-      // Save booking to Supabase
+      // First, fetch the current booking state from database
+      const { data: currentBooking, error: fetchError } = await supabase
+        .from('bookings')
+        .select('*')
+        .eq('id', bookingId)
+        .single();
+
+      if (fetchError) throw fetchError;
+      if (!currentBooking) throw new Error('Booking not found');
+
+      // Check if booking is already in a final state
+      if (currentBooking.status !== 'pending') {
+        throw new Error(`Booking is already ${currentBooking.status} and cannot be modified`);
+      }
+
+      // If booking already has a confirmation code, verify it matches
+      if (currentBooking.confirmation_code) {
+        if (currentBooking.confirmation_code !== confirmationCode) {
+          throw new Error('Invalid confirmation code');
+        }
+      } else {
+        // If no confirmation code exists, verify against session storage (for demo)
+        if (!verifyConfirmationCode(confirmationCode)) {
+          throw new Error('Invalid confirmation code');
+        }
+      }
+    
+      // Update booking status to confirmed
       const { data, error } = await supabase
         .from('bookings')
-        .insert({
-          workspace_type: bookingData.workspaceType,
-          date: bookingData.date,
-          time_slot: bookingData.timeSlot,
-          duration: bookingData.duration,
-          customer_name: bookingData.customerName,
-          customer_email: bookingData.customerEmail,
-          customer_phone: bookingData.customerPhone,
-          customer_whatsapp: bookingData.customerWhatsapp,
-          total_price: bookingData.totalPrice,
+        .update({
+          status: 'confirmed',
           confirmation_code: confirmationCode,
-          user_id: user?.id || null,
-          status: 'pending'
+          updated_at: new Date().toISOString()
         })
+        .eq('id', bookingId)
         .select()
         .single();
 
       if (error) throw error;
 
+      // Send webhook notification
+      try {
+        await fetch('https://webhook.com/example', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'booking_confirmed_by_customer',
+            bookingId: bookingId,
+            confirmationCode: confirmationCode,
+            customerData: {
+              name: currentBooking.customer_name,
+              whatsapp: currentBooking.customer_whatsapp,
+              email: currentBooking.customer_email
+            },
+            bookingDetails: {
+              workspace_type: currentBooking.workspace_type,
+              date: currentBooking.date,
+              time_slot: currentBooking.time_slot,
+              duration: currentBooking.duration,
+              total_price: currentBooking.total_price
+            },
+            timestamp: new Date().toISOString()
+          })
+        });
+      } catch (webhookError) {
+        console.error('Webhook failed:', webhookError);
+        // Don't fail the confirmation if webhook fails
+      }
+
       // Clean up the stored confirmation code
       sessionStorage.removeItem('expectedConfirmationCode');
+      sessionStorage.removeItem('currentBookingId');
       
       console.log('Booking saved successfully:', data);
       return data;

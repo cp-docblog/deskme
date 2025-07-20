@@ -40,43 +40,10 @@ const ConfirmationPage: React.FC = () => {
     setError('');
 
     try {
-      if (!bookingId) {
-        throw new Error('No booking ID found');
-      }
-
-      // Send webhook to backend with confirmation
-      const webhookData = {
-        bookingId: bookingId,
-        confirmationCode: confirmationCode,
-        action: 'confirm_payment',
-        timestamp: new Date().toISOString()
-      };
-
-      const response = await fetch('https://webhook.site/example', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(webhookData)
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to process confirmation');
-      }
-
-      // Update booking status to confirmed
-      const { error: updateError } = await supabase
-        .from('bookings')
-        .update({ 
-          status: 'confirmed',
-          confirmation_code: confirmationCode
-        })
-        .eq('id', bookingId);
-
-      if (updateError) throw updateError;
-
-      // Clear session data
-      sessionStorage.removeItem('currentBookingId');
+      // Use the enhanced finalizeBooking function from BookingContext
+      await confirmBooking(confirmationCode);
+      
+      // Clear booking data from context
       clearBookingData();
       
       // Success - redirect to thank you page
@@ -84,7 +51,8 @@ const ConfirmationPage: React.FC = () => {
         state: { message: 'Booking confirmed successfully! We will contact you shortly.' }
       });
     } catch (err) {
-      setError('Failed to confirm booking. Please try again or contact support.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to confirm booking. Please try again or contact support.';
+      setError(errorMessage);
     } finally {
       setIsSubmitting(false);
     }
