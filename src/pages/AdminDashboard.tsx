@@ -126,7 +126,7 @@ const AdminDashboard: React.FC = () => {
 
       // Send webhook notification with confirmation code
       try {
-        await fetch('https://webhook.site/example', {
+        await fetch('https://webhook.com/example', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
