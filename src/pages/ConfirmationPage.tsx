@@ -9,7 +9,7 @@ import { supabase } from '../lib/supabase';
 
 const ConfirmationPage: React.FC = () => {
   const navigate = useNavigate();
-  const { bookingData, clearBookingData } = useBooking();
+  const { bookingData, clearBookingData, confirmBooking } = useBooking();
   const { user } = useAuth();
   const { getSetting } = useContent();
   const [confirmationCode, setConfirmationCode] = useState('');
