@@ -128,7 +128,7 @@ export const BookingProvider: React.FC<{ children: ReactNode }> = ({ children })
         .from('bookings')
         .select('*')
         .eq('id', bookingId)
-        .single();
+        .maybeSingle();
 
       if (fetchError) throw fetchError;
       if (!currentBooking) throw new Error('Booking not found');
